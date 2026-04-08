@@ -1,23 +1,47 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 
-const API_URL = "http://localhost:8080";
+
+// URL CON DOTNET RUN 
+const API_URL = "http://localhost:5230";
+
+// URL CON DOCKER IMAGE
+//const API_URL = "http://localhost:8080";
 
 const api = {
-  get: (path) => fetch(`${API_URL}${path}`).then((r) => r.json()),
-  post: (path, body) => 
+  get: (path) =>
+    fetch(`${API_URL}${path}`, { credentials: "include" }).then((r) => {
+      if (r.status === 401) throw new Error("401");
+      return r.json();
+    }),
+  post: (path, body) =>
     fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
+      credentials: "include", // ← enviar la cookie en cada petición
       body: JSON.stringify(body),
-    }).then((r) => r.json()),
+    }).then((r) => {
+      if (r.status === 401) throw new Error("401");
+      return r.json();
+    }),
   put: (path, body) =>
     fetch(`${API_URL}${path}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
-    }).then((r) => r.json()),
-  delete: (path) => fetch(`${API_URL}${path}`, { method: "DELETE"}),
+    }).then((r) => {
+      if (r.status === 401) throw new Error("401");
+      return r.json();
+    }),
+  delete: (path) =>
+    fetch(`${API_URL}${path}`, {
+      method: "DELETE",
+      credentials: "include",
+    }).then((r) => {
+      if (r.status === 401) throw new Error("401");
+      return r;
+    }),
 };
 
 const STATUS_CLASS = {
@@ -94,31 +118,109 @@ function Btn({ variant = "primary", className = "", children, ...props}){
   );
 }
 
+// ─── LOGIN PAGE ──────
+
+function  LoginPage({ onLogin }){
+  const [form, setForm] = useState({ email: "", password: ""});
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json"},
+        credentials: "include",
+        body: JSON.stringify(form),
+      });
+
+      if(res.ok){
+        onLogin();
+      }else{
+        setError("Credenciales inválidas. Verifica tu email y contraseña");
+      }
+    } catch  {
+      setError("No se pudo conectar al servidor");
+    } finally{
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <div className="login-card"> 
+        <div className="login-brand">
+            <span className="header__icon">⚡</span>
+            <span className="header__title">IncidentAPI</span>
+        </div>
+        <h2 className="login-title">Iniciar Sesión</h2>
+        <p className="login-subtitle">Ingresa tus Crendenciales para continuar</p>
+
+        {error && <div className="login-error"> {error} </div>}
+
+        <Input 
+          label="Email"
+          type="email"
+          value={form.email}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          placeholder="correo@example.com"
+        />
+
+        <Input 
+          label="Contraseña"
+          type="password"
+          value={form.password}
+          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+          placeholder="••••••••"
+          onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+        />
+
+        <Btn className="btn--full" onClick={handleLogin} disabled={loading}>
+          {loading ? "Ingresando..." : "Ingresar"}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+
 // ─── USUARIOS ──────
 
-function UsersSection() {
+function UsersSection({ onUnauthorized }) {
   const [users, setUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", email: ""});
 
-  const load = () => api.get("/api/user").then(setUsers).catch(() => {});
+  const load = () => api.get("/api/user").then(setUsers).catch((e) => {
+    if(e.message === "401") onUnauthorized();
+  });
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    if(editing) await api.put(`/api/user/${editing.id}`, 
+   try {
+     if(editing) await api.put(`/api/user/${editing.id}`, 
       { ...form, id: editing.id});
-    else await api.post("/api/user", form);
-    setShowForm(false);
-    setEditing(null);
-    setForm({ name: "", email: ""});
-    load();
+      else await api.post("/api/user", form);
+      setShowForm(false);
+      setEditing(null);
+      setForm({ name: "", email: ""});
+      load();
+   } catch (e) {
+      if(e.message === "401")  onUnauthorized();
+   }
   };
 
   const del = async (id) => {
-    if(confirm("¿Eliminar usuario?")){
+    try {
+      if(confirm("¿Eliminar usuario?")){
       await api.delete(`/api/user/${id}`);
       load();
+    }
+    } catch (e) {
+      if(e.message === "401") onUnauthorized();
     }
   };
 
@@ -153,7 +255,7 @@ return (
             <td>{u.name}</td>
             <td>{u.email}</td>
             <td>
-              <Btn variant="senconday" className="btn--sn" style={{ marginRight: 6}}
+              <Btn variant="secondary" className="btn--sm" style={{ marginRight: 6}}
               onClick={() => edit(u)}>Editar</Btn>
               <Btn variant="danger" className="btn--sm" onClick={() =>del(u.id)}>Eliminar</Btn>
             </td>
@@ -189,28 +291,38 @@ return (
 
 // ─── CATEGORIAS ──────
 
-function CategoriesSection() {
+function CategoriesSection({ onUnauthorized}) {
   const [cats, setCats] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: ""});
 
-  const load = () => api.get("/api/category").then(setCats).catch(() => {});
+  const load = () => api.get("/api/category").then(setCats).catch((e) => {
+    if(e.message === "401") onUnauthorized();
+  });
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    if(editing) await api.put(`/api/category/${editing.id}`, { ...form, id: editing.id});
-    else await api.post("/api/category", form);
-    setShowForm(false);
-    setEditing(null);
-    setForm({ name: ""})
-    load();
+    try {
+      if(editing) await api.put(`/api/category/${editing.id}`, { ...form, id: editing.id});
+      else await api.post("/api/category", form);
+      setShowForm(false);
+      setEditing(null);
+      setForm({ name: ""})
+      load();
+    } catch (e) {
+      if(e.message === "401") onUnauthorized();
+    }
   };
 
   const del = async (id) => {
-    if(confirm("¿Eliminar categoría?")) {
+    try {
+      if(confirm("¿Eliminar categoría?")) {
       await api.delete(`/api/category/${id}`);
       load();
+    }
+    } catch (e) {
+      if(e.message === "401") onUnauthorized();
     }
   };
 
@@ -277,7 +389,7 @@ function CategoriesSection() {
 // ── INCIDENTES ────────────────────────────────────────────
 
 
-function IncidentsSection () {
+function IncidentsSection ({ onUnauthorized }) {
   const [incidents, setIncidents] = useState([]);
   const [users, setUsers] = useState([]);
   const [cats, setCats] = useState([]);
@@ -287,26 +399,34 @@ function IncidentsSection () {
   const [form, setForm] = useState({ title: "", description: "", status: "abierto", userId: "", categoryId: "" });
 
   const load = () => {
-    api.get("/api/incident").then(setIncidents).catch(() => {});
+    api.get("/api/incident").then(setIncidents).catch((e) => {if(e.message === "401") onUnauthorized(); });
     api.get("/api/user").then(setUsers).catch(() => {});
     api.get("/api/category").then(setCats).catch(() => {});
   };
   useEffect(() => {load (); }, []);
 
   const save = async () =>{
-    const payload = { ...form, userId: parseInt(form.userId), categoryId: parseInt(form.categoryId)};
-    if (editing) await api.put(`/api/incident/${editing.id}`, {...payload, id: editing.id});
-    else await api.post("/api/incident", payload);
-    setShowForm(false);
-    setEditing(null);
-    setForm({ title: "", description: "", status: "abierto", userId: "", categoryId: ""});
-    load();
+    try {
+      const payload = { ...form, userId: parseInt(form.userId), categoryId: parseInt(form.categoryId)};
+      if (editing) await api.put(`/api/incident/${editing.id}`, {...payload, id: editing.id});
+      else await api.post("/api/incident", payload);
+      setShowForm(false);
+      setEditing(null);
+      setForm({ title: "", description: "", status: "abierto", userId: "", categoryId: ""});
+      load();
+    } catch (e) {
+      if(e.message === "401") onUnauthorized();
+    }
   };
 
   const del = async (id) => {
     if(confirm("¿Eliminar incidente")){
-      await api.delete(`/api/incident/${id}`);
-      load();
+      try {
+        await api.delete(`/api/incident/${id}`);
+        load();
+      } catch (e) {
+        if(e.message === "401") onUnauthorized(); 
+      }
     }
   };
 
@@ -378,7 +498,7 @@ function IncidentsSection () {
         </Modal>
       )}
       {selected && (
-        <CommentsModal incident={selected} onClose={() => {setSelected(null); load(); }} />
+        <CommentsModal incident={selected} onClose={() => {setSelected(null); load(); }} onUnauthorized={onUnauthorized}/>
       )}
     </div>
   );
@@ -387,22 +507,33 @@ function IncidentsSection () {
 
 // ── COMENTARIOS ─────────────────────────────────────────── 
 
-function CommentsModal({ incident, onClose}){
+function CommentsModal({ incident, onClose, onUnauthorized}){
   const [comments, setComments] = useState([]);
   const [form, setForm] = useState({ content: "", author: ""});
 
-  const load = () => api.get(`/api/comment/incident/${incident.id}`).then(setComments).catch(() => {});
+  const load = () => 
+    api.get(`/api/comment/incident/${incident.id}`).then(setComments).catch((e) => {
+      if(e.message === "401") onUnauthorized();
+    });
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    await api.post("/api/comment", {...form, incidentId: incident.id});
-    setForm({ content: "", author: ""});
-    load();
+    try {
+      await api.post("/api/comment", {...form, incidentId: incident.id});
+      setForm({ content: "", author: ""});
+      load();
+    } catch (e) {
+      if(e.message === "401") onUnauthorized();
+    }
   };
 
   const del = async (id) => {
-    await api.delete(`/api/comment/${id}`);
-    load();
+    try {
+      await api.delete(`/api/comment/${id}`);
+      load();
+    } catch (e) {
+      if(e.message === "401") onUnauthorized();
+    }
   };
 
   return (
@@ -445,6 +576,21 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState("incidents");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  const handleLogout = async () => {
+    await fetch(`${API_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    setIsLoggedIn(false);
+  };
+
+  const handleUnauthorized = () => setIsLoggedIn(false);
+
+  if(!isLoggedIn){
+    return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   return (
     <div className="app">
@@ -465,13 +611,16 @@ export default function App() {
             </button>
           ))}
         </div>
+        <Btn variant="secondary" className="btn--sm" style={{ marginLeft: 16}} onClick={handleLogout}>
+            Cerrar Sesión
+        </Btn>
       </div>
 
       <div className="content">
           <div className="card">
-            {tab === "incidents" && <IncidentsSection />}
-            {tab === "users" && <UsersSection/>}
-            {tab === "categories" && <CategoriesSection />}
+            {tab === "incidents" && <IncidentsSection onUnauthorized={handleUnauthorized}/>}
+            {tab === "users" && <UsersSection onUnauthorized={handleUnauthorized}/>}
+            {tab === "categories" && <CategoriesSection onUnauthorized={handleUnauthorized}/>}
           </div>
       </div>
     </div>
