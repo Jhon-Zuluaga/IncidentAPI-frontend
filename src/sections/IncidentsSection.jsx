@@ -35,27 +35,58 @@ export default function IncidentsSection({ onUnauthorized }) {
 
   // Carga incidentes, usuarios y categorías en paralelo
   const load = () => {
-    api.get("/api/incident").then(setIncidents).catch((e) => { if (e.message === "401") onUnauthorized(); });
-    api.get("/api/user").then(setUsers).catch(() => {});
-    api.get("/api/category").then(setCats).catch(() => {});
+    api
+      .get("/api/incident")
+      .then(setIncidents)
+      .catch((e) => {
+        if (e.message === "401") onUnauthorized();
+      });
+    api
+      .get("/api/user")
+      .then(setUsers)
+      .catch(() => {});
+    api
+      .get("/api/category")
+      .then(setCats)
+      .catch(() => {});
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const save = async () => {
-    try {
-      // Convierte userId y categoryId a número porque vienen como string del select
-      const payload = { ...form, userId: parseInt(form.userId), categoryId: parseInt(form.categoryId) };
+    if (!form.title.trim()) return alert("El título es obligatorio");
+    if (!form.userId) return alert("Debes seleccionar un usuario");
+    if (!form.categoryId) return alert("Debes seleccionar una categoría");
 
-      if (editing) await api.put(`/api/incident/${editing.id}`, { ...payload, id: editing.id });
+    try {
+      const payload = {
+        ...form,
+        userId: parseInt(form.userId),
+        categoryId: parseInt(form.categoryId),
+      };
+
+      if (editing)
+        await api.put(`/api/incident/${editing.id}`, {
+          ...payload,
+          id: editing.id,
+        });
       else await api.post("/api/incident", payload);
 
       setShowForm(false);
       setEditing(null);
-      setForm({ title: "", description: "", status: "abierto", userId: "", categoryId: "" });
+      setForm({
+        title: "",
+        description: "",
+        status: "abierto",
+        userId: "",
+        categoryId: "",
+      });
       load();
     } catch (e) {
       if (e.message === "401") onUnauthorized();
+      else console.error("Error al guardar:", e);
     }
   };
 
@@ -86,7 +117,19 @@ export default function IncidentsSection({ onUnauthorized }) {
     <div>
       <div className="section-header">
         <h2 className="section-title">Incidentes</h2>
-        <Btn onClick={() => { setEditing(null); setForm({ title: "", description: "", status: "abierto", userId: "", categoryId: "" }); setShowForm(true); }}>
+        <Btn
+          onClick={() => {
+            setEditing(null);
+            setForm({
+              title: "",
+              description: "",
+              status: "abierto",
+              userId: "",
+              categoryId: "",
+            });
+            setShowForm(true);
+          }}
+        >
           + Nuevo
         </Btn>
       </div>
@@ -100,20 +143,43 @@ export default function IncidentsSection({ onUnauthorized }) {
                 <span className="incident-card__title">{i.title}</span>
                 <Badge status={i.status} />
               </div>
-              <p className="incident-card__desc">{i.description || "Sin descripción"}</p>
+              <p className="incident-card__desc">
+                {i.description || "Sin descripción"}
+              </p>
               <p className="incident-card__meta">
-                Usuario ID: {i.userId} · Categoría ID: {i.categoryId} · {new Date(i.createdAt).toLocaleDateString()}
+                Usuario ID: {i.userId} · Categoría ID: {i.categoryId} ·{" "}
+                {new Date(i.createdAt).toLocaleDateString()}
               </p>
             </div>
             <div className="incident-card__actions">
               {/* Al hacer click en Comentarios, guarda el incidente en `selected` */}
-              <Btn variant="secondary" className="btn--sm" onClick={() => setSelected(i)}>Comentarios</Btn>
-              <Btn variant="secondary" className="btn--sm" onClick={() => edit(i)}>Editar</Btn>
-              <Btn variant="danger" className="btn--sm" onClick={() => del(i.id)}>Eliminar</Btn>
+              <Btn
+                variant="secondary"
+                className="btn--sm"
+                onClick={() => setSelected(i)}
+              >
+                Comentarios
+              </Btn>
+              <Btn
+                variant="secondary"
+                className="btn--sm"
+                onClick={() => edit(i)}
+              >
+                Editar
+              </Btn>
+              <Btn
+                variant="danger"
+                className="btn--sm"
+                onClick={() => del(i.id)}
+              >
+                Eliminar
+              </Btn>
             </div>
           </div>
         ))}
-        {incidents.length === 0 && <div className="empty-state">Sin incidentes</div>}
+        {incidents.length === 0 && (
+          <div className="empty-state">Sin incidentes</div>
+        )}
       </div>
 
       {showForm && (
@@ -121,30 +187,66 @@ export default function IncidentsSection({ onUnauthorized }) {
           title={editing ? "Editar Incidente" : "Nuevo Incidente"}
           onClose={() => setShowForm(false)}
         >
-          <Input label="Título" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Título del incidente" />
-          <Textarea label="Descripción" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Descripción del incidente" />
+          <Input
+            label="Título"
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="Título del incidente"
+          />
+          <Textarea
+            label="Descripción"
+            value={form.description}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, description: e.target.value }))
+            }
+            placeholder="Descripción del incidente"
+          />
 
           {/* Select de estado: valores fijos definidos en el backend */}
-          <Select label="Estado" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
+          <Select
+            label="Estado"
+            value={form.status}
+            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+          >
             <option value="abierto">Abierto</option>
-            <option value="en progreso">En Progreso</option>
+            <option value="en_progreso">En Progreso</option>
             <option value="cerrado">Cerrado</option>
           </Select>
 
           {/* Select dinámico: opciones vienen del array `users` cargado del backend */}
-          <Select label="Usuario" value={form.userId} onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}>
+          <Select
+            label="Usuario"
+            value={form.userId}
+            onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
+          >
             <option value="">Selecciona un usuario</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
           </Select>
 
           {/* Select dinámico: opciones vienen del array `cats` cargado del backend */}
-          <Select label="Categoría" value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}>
+          <Select
+            label="Categoría"
+            value={form.categoryId}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, categoryId: e.target.value }))
+            }
+          >
             <option value="">Selecciona una categoría</option>
-            {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </Select>
 
           <div className="modal__actions">
-            <Btn variant="secondary" onClick={() => setShowForm(false)}>Cancelar</Btn>
+            <Btn variant="secondary" onClick={() => setShowForm(false)}>
+              Cancelar
+            </Btn>
             <Btn onClick={save}>Guardar</Btn>
           </div>
         </Modal>
@@ -154,7 +256,10 @@ export default function IncidentsSection({ onUnauthorized }) {
       {selected && (
         <CommentsModal
           incident={selected}
-          onClose={() => { setSelected(null); load(); }}
+          onClose={() => {
+            setSelected(null);
+            load();
+          }}
           onUnauthorized={onUnauthorized}
         />
       )}
