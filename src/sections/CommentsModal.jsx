@@ -13,11 +13,16 @@ export default function CommentsModal({ incident, onClose, onUnauthorized }) {
 
   // Carga los comentarios filtrados por incidente usando su id
   const load = () =>
-    api.get(`/api/comment/incident/${incident.id}`).then(setComments).catch((e) => {
-      if (e.message === "401") onUnauthorized();
-    });
+    api
+      .get(`/api/comment/incident/${incident.id}`)
+      .then(setComments)
+      .catch((e) => {
+        if (e.message === "401") onUnauthorized();
+      });
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   // Agrega un nuevo comentario vinculado al incidente actual
   const save = async () => {
@@ -49,7 +54,9 @@ export default function CommentsModal({ incident, onClose, onUnauthorized }) {
             <p className="comment__meta">
               {c.author} · {new Date(c.createdAt).toLocaleDateString()}
             </p>
-            <button className="comment__delete" onClick={() => del(c.id)}>×</button>
+            <button className="comment__delete" onClick={() => del(c.id)}>
+              ×
+            </button>
           </div>
         ))}
         {comments.length === 0 && (
@@ -59,9 +66,21 @@ export default function CommentsModal({ incident, onClose, onUnauthorized }) {
 
       {/* Formulario para agregar un comentario nuevo */}
       <div className="comments-form">
-        <Input label="Autor" value={form.author} onChange={(e) => setForm((f) => ({ ...f, author: e.target.value }))} placeholder="Tu nombre" />
-        <Textarea label="Comentario" value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} placeholder="Escribe tu comentario..." />
-        <Btn className="btn--full" onClick={save}>Agregar Comentario</Btn>
+        <Input
+          label="Autor"
+          value={form.author}
+          onChange={(e) => setForm((f) => ({ ...f, author: e.target.value }))}
+          placeholder="Tu nombre"
+        />
+        <Textarea
+          label="Comentario"
+          value={form.content}
+          onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+          placeholder="Escribe tu comentario..."
+        />
+        <Btn className="btn--full" onClick={save}>
+          Agregar Comentario
+        </Btn>
       </div>
     </Modal>
   );

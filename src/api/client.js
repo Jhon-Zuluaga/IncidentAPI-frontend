@@ -55,4 +55,18 @@ export const api = {
       if (!r.ok) throw new Error(`Error ${r.status}`);
       return r;
     }),
+
+  uploadFile: (path, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetch(`${API_URL}${path}`, {
+      method: "POST",
+      credentials: "include",
+      body: formData, // Sin cotent-type header, el browser lo pone
+    }).then((r) => {
+      if (r.status === 401) throw new Error("401");
+      if (!r.ok) throw new Error(`Error ${r.status}`);
+      return r.json();
+    });
+  },
 };
